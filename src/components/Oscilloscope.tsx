@@ -12,21 +12,38 @@ const Oscilloscope: React.FC = () => {
     const [isRunning, setIsRunning] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [sourceType, setSourceType] = useState<AudioSourceType>('oscillator');
+    const [isSplitScreen, setIsSplitScreen] = useState(false);
 
-    // Display Params
+    // Display Params CH1
     const [voltsPerDiv, setVoltsPerDiv] = useState(1);
     const [verticalOffset, setVerticalOffset] = useState(0); // divisions
     const [timePerDiv, setTimePerDiv] = useState(10); // ms
     const [horizontalOffset, setHorizontalOffset] = useState(0); // divisions
 
+    // Display Params CH2
+    const [voltsPerDiv2, setVoltsPerDiv2] = useState(1);
+    const [verticalOffset2, setVerticalOffset2] = useState(0); // divisions
+    const [timePerDiv2, setTimePerDiv2] = useState(10); // ms
+    const [horizontalOffset2, setHorizontalOffset2] = useState(0); // divisions
+
     // Trigger Params
     const [triggerLevel, setTriggerLevel] = useState(0);
     const [triggerSlope, setTriggerSlope] = useState<'rising' | 'falling'>('rising');
+    const [triggerSource, setTriggerSource] = useState<'CH1' | 'CH2'>('CH1');
 
-    // Generator Params
+    // Generator Params CH1
     const [oscFrequency, setOscFrequency] = useState(440);
     const [oscAmplitude, setOscAmplitude] = useState(1);
     const [oscType, setOscType] = useState<OscillatorType>('sine');
+
+    // Generator Params CH2
+    const [osc2Frequency, setOsc2Frequency] = useState(440);
+    const [osc2Amplitude, setOsc2Amplitude] = useState(1);
+    const [osc2Type, setOsc2Type] = useState<OscillatorType>('sine');
+
+    // Channel Visibility
+    const [showCH1, setShowCH1] = useState(false);
+    const [showCH2, setShowCH2] = useState(false);
 
     // Microphone Params
     const [micGain, setMicGain] = useState(1);
@@ -38,6 +55,7 @@ const Oscilloscope: React.FC = () => {
 
     // Audio Objects
     const oscillatorRef = useRef<Oscillator>(new Oscillator());
+    const oscillator2Ref = useRef<Oscillator>(new Oscillator());
     const microphoneRef = useRef<Microphone>(new Microphone());
     const audioPlayerRef = useRef<AudioPlayer>(new AudioPlayer());
 
@@ -54,52 +72,74 @@ const Oscilloscope: React.FC = () => {
         if (isRunning) {
             audioEngine.init();
 
-            // Start source
+            // Start source CH1
+            if (showCH1) {
+                if (sourceType === 'oscillator') {
+                    oscillatorRef.current.start(oscType, oscFrequency, oscAmplitude, 1);
+                } else if (sourceType === 'mic') {
+                    microphoneRef.current.start();
+                } else if (sourceType === 'file') {
+                    audioPlayerRef.current.play();
+                }
+            }
+
+            // Start source CH2 (Always oscillator for now)
+            if (showCH2) {
+                oscillator2Ref.current.start(osc2Type, osc2Frequency, osc2Amplitude, 2);
+            }
+
+        } else {
+            // Stop sources
+            oscillatorRef.current.stop();
+            oscillator2Ref.current.stop();
+            microphoneRef.current.stop();
+            audioPlayerRef.current.pause();
+        }
+    }, [isRunning, showCH1, showCH2]); // Re-run if visibility changes
+
+    // Handle Source Switching (CH1)
+    useEffect(() => {
+        if (!isRunning) return;
+
+        // Stop all CH1 sources
+        oscillatorRef.current.stop();
+        microphoneRef.current.stop();
+        audioPlayerRef.current.pause();
+
+        // Start new CH1 if visible
+        if (showCH1) {
             if (sourceType === 'oscillator') {
-                oscillatorRef.current.start(oscType, oscFrequency, oscAmplitude);
+                oscillatorRef.current.start(oscType, oscFrequency, oscAmplitude, 1);
             } else if (sourceType === 'mic') {
                 microphoneRef.current.start();
             } else if (sourceType === 'file') {
                 audioPlayerRef.current.play();
             }
-        } else {
-            // Stop sources
-            oscillatorRef.current.stop();
-            microphoneRef.current.stop();
-            audioPlayerRef.current.pause();
         }
-    }, [isRunning]);
+    }, [sourceType, showCH1]);
 
-    // Handle Source Switching
+    // Update Oscillator Params CH1
     useEffect(() => {
-        if (!isRunning) return;
-
-        // Stop all
-        oscillatorRef.current.stop();
-        microphoneRef.current.stop();
-        audioPlayerRef.current.pause();
-
-        // Start new
-        if (sourceType === 'oscillator') {
-            oscillatorRef.current.start(oscType, oscFrequency, oscAmplitude);
-        } else if (sourceType === 'mic') {
-            microphoneRef.current.start();
-        } else if (sourceType === 'file') {
-            audioPlayerRef.current.play();
-        }
-    }, [sourceType]);
-
-    // Update Oscillator Params
-    useEffect(() => {
-        if (sourceType === 'oscillator' && isRunning) {
+        if (sourceType === 'oscillator' && isRunning && showCH1) {
             oscillatorRef.current.setFrequency(oscFrequency);
             oscillatorRef.current.setAmplitude(oscAmplitude);
             oscillatorRef.current.setType(oscType);
         }
-        if (sourceType === 'mic' && isRunning) {
+        if (sourceType === 'mic' && isRunning && showCH1) {
             microphoneRef.current.setGain(micGain);
         }
-    }, [oscFrequency, oscAmplitude, oscType, micGain, sourceType, isRunning]);
+    }, [oscFrequency, oscAmplitude, oscType, micGain, sourceType, isRunning, showCH1]);
+
+    // Update Oscillator Params CH2
+    useEffect(() => {
+        if (showCH2 && isRunning) {
+            oscillator2Ref.current.setFrequency(osc2Frequency);
+            oscillator2Ref.current.setAmplitude(osc2Amplitude);
+            oscillator2Ref.current.setType(osc2Type);
+        } else {
+            oscillator2Ref.current.stop();
+        }
+    }, [osc2Frequency, osc2Amplitude, osc2Type, showCH2, isRunning]);
 
     // Handle Mute
     useEffect(() => {
@@ -109,7 +149,7 @@ const Oscilloscope: React.FC = () => {
     const handleFileLoad = async (file: File) => {
         await audioPlayerRef.current.loadFile(file);
         setAudioDuration(audioPlayerRef.current.getDuration());
-        if (isRunning && sourceType === 'file') {
+        if (isRunning && sourceType === 'file' && showCH1) {
             setIsAudioPlaying(true);
         }
     };
@@ -119,14 +159,28 @@ const Oscilloscope: React.FC = () => {
         setVerticalOffset(0);
         setTimePerDiv(10);
         setHorizontalOffset(0);
+
+        setVoltsPerDiv2(1);
+        setVerticalOffset2(0);
+        setTimePerDiv2(10);
+        setHorizontalOffset2(0);
+
         setTriggerLevel(0);
         setTriggerSlope('rising');
+        setTriggerSource('CH1');
+
         setOscFrequency(440);
         setOscAmplitude(1);
         setOscType('sine');
+
+        setOsc2Frequency(440);
+        setOsc2Amplitude(1);
+        setOsc2Type('sine');
+
         setSourceType('oscillator');
         setMicGain(1);
         setIsMuted(false);
+        setIsSplitScreen(false);
         // We don't reset isRunning, user might want to keep running
     };
 
@@ -143,9 +197,9 @@ const Oscilloscope: React.FC = () => {
         }}>
             <div className="device-frame" style={{
                 width: '100%',
-                maxWidth: '1400px',
+                maxWidth: '1600px', // Increased width
                 height: '100%',
-                maxHeight: '700px',
+                maxHeight: '800px', // Increased height
                 background: '#222',
                 borderRadius: '20px',
                 boxShadow: '0 20px 50px rgba(0,0,0,0.5), inset 0 1px 2px rgba(255,255,255,0.1)',
@@ -155,7 +209,7 @@ const Oscilloscope: React.FC = () => {
             }}>
                 {/* Screen Section */}
                 <div className="screen-section" style={{
-                    flex: 3,
+                    flex: 2,
                     background: '#000',
                     position: 'relative',
                     borderRight: '2px solid #111',
@@ -193,12 +247,22 @@ const Oscilloscope: React.FC = () => {
                             <OscilloscopeScreen
                                 timePerDiv={timePerDiv}
                                 voltsPerDiv={voltsPerDiv}
-                                triggerLevel={triggerLevel}
-                                triggerSlope={triggerSlope}
-                                isRunning={isRunning}
-                                frequency={oscFrequency}
                                 verticalOffset={verticalOffset}
                                 horizontalOffset={horizontalOffset}
+
+                                timePerDiv2={timePerDiv2}
+                                voltsPerDiv2={voltsPerDiv2}
+                                verticalOffset2={verticalOffset2}
+                                horizontalOffset2={horizontalOffset2}
+
+                                triggerLevel={triggerLevel}
+                                triggerSlope={triggerSlope}
+                                triggerSource={triggerSource}
+                                isRunning={isRunning}
+                                frequency={oscFrequency}
+                                showCH1={showCH1}
+                                showCH2={showCH2}
+                                isSplitScreen={isSplitScreen}
                             />
                         </div>
                     </div>
@@ -207,8 +271,7 @@ const Oscilloscope: React.FC = () => {
                 {/* Controls Section */}
                 <div className="controls-section" style={{
                     flex: 1,
-                    minWidth: '320px',
-                    maxWidth: '360px',
+                    minWidth: '500px', // Increased width for side-by-side controls
                     background: '#1e1e1e',
                     padding: '0',
                     overflowY: 'auto',
@@ -220,12 +283,24 @@ const Oscilloscope: React.FC = () => {
                         verticalOffset={verticalOffset} setVerticalOffset={setVerticalOffset}
                         timePerDiv={timePerDiv} setTimePerDiv={setTimePerDiv}
                         horizontalOffset={horizontalOffset} setHorizontalOffset={setHorizontalOffset}
+
+                        voltsPerDiv2={voltsPerDiv2} setVoltsPerDiv2={setVoltsPerDiv2}
+                        verticalOffset2={verticalOffset2} setVerticalOffset2={setVerticalOffset2}
+                        timePerDiv2={timePerDiv2} setTimePerDiv2={setTimePerDiv2}
+                        horizontalOffset2={horizontalOffset2} setHorizontalOffset2={setHorizontalOffset2}
+
                         triggerLevel={triggerLevel} setTriggerLevel={setTriggerLevel}
                         triggerSlope={triggerSlope} setTriggerSlope={setTriggerSlope}
+                        triggerSource={triggerSource} setTriggerSource={setTriggerSource}
                         sourceType={sourceType} setSourceType={setSourceType}
                         oscFrequency={oscFrequency} setOscFrequency={setOscFrequency}
                         oscAmplitude={oscAmplitude} setOscAmplitude={setOscAmplitude}
                         oscType={oscType} setOscType={setOscType}
+                        osc2Frequency={osc2Frequency} setOsc2Frequency={setOsc2Frequency}
+                        osc2Amplitude={osc2Amplitude} setOsc2Amplitude={setOsc2Amplitude}
+                        osc2Type={osc2Type} setOsc2Type={setOsc2Type}
+                        showCH1={showCH1} setShowCH1={setShowCH1}
+                        showCH2={showCH2} setShowCH2={setShowCH2}
                         micGain={micGain} setMicGain={setMicGain}
                         audioCurrentTime={audioCurrentTime}
                         audioDuration={audioDuration}
@@ -253,6 +328,8 @@ const Oscilloscope: React.FC = () => {
                         isMuted={isMuted} setIsMuted={setIsMuted}
                         onFileLoad={handleFileLoad}
                         onReset={handleReset}
+                        isSplitScreen={isSplitScreen}
+                        setIsSplitScreen={setIsSplitScreen}
                     />
                 </div>
             </div>

@@ -2,11 +2,13 @@
 
 class AudioEngine {
     private context: AudioContext | null = null;
-    private analyser: AnalyserNode | null = null;
+    private analyserCH1: AnalyserNode | null = null;
+    private analyserCH2: AnalyserNode | null = null;
     private masterGain: GainNode | null = null;
 
     // Sources
-    private currentSourceNode: AudioNode | null = null;
+    private sourceCH1: AudioNode | null = null;
+    private sourceCH2: AudioNode | null = null;
 
     constructor() {
         // Context is initialized on user interaction
@@ -15,18 +17,20 @@ class AudioEngine {
     public init() {
         if (!this.context) {
             this.context = new (window.AudioContext || (window as any).webkitAudioContext)();
-            this.analyser = this.context.createAnalyser();
             this.masterGain = this.context.createGain();
-
-            // Configuration
-            this.analyser.fftSize = 32768; // Max size for longer time window
-            this.analyser.smoothingTimeConstant = 0; // No smoothing for oscilloscope
-
-            // Routing: Source -> Analyser -> MasterGain -> Destination
-            // (Note: We might want to disconnect MasterGain from Destination if we don't want to hear it, 
-            // or provide a mute toggle. For now, we connect it.)
-            this.analyser.connect(this.masterGain);
             this.masterGain.connect(this.context.destination);
+
+            // CH1 Setup
+            this.analyserCH1 = this.context.createAnalyser();
+            this.analyserCH1.fftSize = 32768;
+            this.analyserCH1.smoothingTimeConstant = 0;
+            this.analyserCH1.connect(this.masterGain);
+
+            // CH2 Setup
+            this.analyserCH2 = this.context.createAnalyser();
+            this.analyserCH2.fftSize = 32768;
+            this.analyserCH2.smoothingTimeConstant = 0;
+            this.analyserCH2.connect(this.masterGain);
         }
 
         if (this.context.state === 'suspended') {
@@ -39,21 +43,27 @@ class AudioEngine {
         return this.context;
     }
 
-    public getAnalyser(): AnalyserNode {
-        if (!this.analyser) throw new Error("Analyser not initialized");
-        return this.analyser;
+    public getAnalyser(channel: 1 | 2 = 1): AnalyserNode {
+        if (channel === 2) {
+            if (!this.analyserCH2) throw new Error("Analyser CH2 not initialized");
+            return this.analyserCH2;
+        }
+        if (!this.analyserCH1) throw new Error("Analyser CH1 not initialized");
+        return this.analyserCH1;
     }
 
-    public connectSource(node: AudioNode) {
-        if (!this.analyser) this.init();
+    public connectSource(node: AudioNode, channel: 1 | 2 = 1) {
+        if (!this.context) this.init();
 
-        // Disconnect previous source
-        if (this.currentSourceNode) {
-            this.currentSourceNode.disconnect();
+        if (channel === 1) {
+            if (this.sourceCH1) this.sourceCH1.disconnect();
+            this.sourceCH1 = node;
+            this.sourceCH1.connect(this.analyserCH1!);
+        } else {
+            if (this.sourceCH2) this.sourceCH2.disconnect();
+            this.sourceCH2 = node;
+            this.sourceCH2.connect(this.analyserCH2!);
         }
-
-        this.currentSourceNode = node;
-        this.currentSourceNode.connect(this.analyser!);
     }
 
     public setVolume(value: number) {

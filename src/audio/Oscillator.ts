@@ -8,11 +8,10 @@ export class Oscillator {
 
     constructor() { }
 
-    public start(type: OscillatorType = 'sine', frequency: number = 440, amplitude: number = 1) {
+    public start(type: OscillatorType, frequency: number, amplitude: number, channel: 1 | 2 = 1) {
+        if (this.oscNode) this.stop();
+
         const context = audioEngine.getContext();
-
-        if (this.isRunning) this.stop();
-
         this.oscNode = context.createOscillator();
         this.gainNode = context.createGain();
 
@@ -27,7 +26,7 @@ export class Oscillator {
         this.isRunning = true;
 
         // Connect to engine
-        audioEngine.connectSource(this.gainNode);
+        audioEngine.connectSource(this.gainNode, channel);
     }
 
     public stop() {
